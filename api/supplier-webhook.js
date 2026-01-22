@@ -1,32 +1,48 @@
 export default async function handler(req, res) {
+  // 1️⃣ Hanya terima POST
   if (req.method !== "POST") {
     return res.status(405).json({ success: false });
   }
 
+  // 2️⃣ VALIDASI RESELLER (ANTI WEBHOOK PALSU)
+  if (req.body.kodereseller !== "RS00547") {
+    return res.status(403).json({
+      success: false,
+      message: "Invalid reseller"
+    });
+  }
+
+  // 3️⃣ Ambil data dari supplier
   const {
     success,
     status,
     refid,
+    supplier_trxid,
     kode_produk,
     nomor_tujuan,
     harga,
+    message,
     note,
     updated_at
   } = req.body;
 
+  // 4️⃣ Validasi minimal wajib
   if (!refid || !status) {
-    return res.status(400).json({ success: false });
+    return res.status(400).json({
+      success: false,
+      message: "Data wajib tidak lengkap"
+    });
   }
 
+  // 5️⃣ Tentukan status final
   const isSuccess = status === "success" || success === true;
 
+  // 6️⃣ Format harga
   const rupiah = harga
     ? harga.toLocaleString("id-ID")
     : "0";
 
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-
+  // 7️⃣ Format pesan Telegram (SESUIAI DOKUMENTASI)
   const text = isSuccess
     ? `✅ *TRANSAKSI SUCCESS*
 
@@ -34,20 +50,24 @@ export default async function handler(req, res) {
 📱 Tujuan : ${nomor_tujuan}
 💰 Harga  : Rp${rupiah}
 🆔 RefID  : ${refid}
-📌 SN     : ${note || "-"}
-🕒 Waktu  : ${updated_at || "-"}`
+🏭 SupID  : ${supplier_trxid}
+📌 SN     : ${note}
+🕒 Waktu  : ${updated_at}`
     : `❌ *TRANSAKSI FAILED*
 
 📦 Produk : ${kode_produk}
 📱 Tujuan : ${nomor_tujuan}
 💰 Harga  : Rp${rupiah}
 🆔 RefID  : ${refid}
-⚠️ Alasan : ${note || "-"}
-🕒 Waktu  : ${updated_at || "-"}`;
+🏭 SupID  : ${supplier_trxid}
+⚠️ Info   : ${note}
+🕒 Waktu  : ${updated_at}`;
 
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  // 8️⃣ Kirim ke Telegram
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
 
-  await fetch(url, {
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -57,5 +77,9 @@ export default async function handler(req, res) {
     })
   });
 
-  res.json({ success: true });
+  // 9️⃣ Respon ke supplier (WAJIB 200)
+  return res.json({
+    success: true,
+    refid
+  });
 }
